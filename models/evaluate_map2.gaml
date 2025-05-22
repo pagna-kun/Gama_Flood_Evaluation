@@ -19,8 +19,6 @@ global {
 	file building_shape <- file("../includes/building.shp");
 	file road_shape <- file("../includes/road.shp");
 
-//	file building_shape <- file("../includes/buildings.shp");
-//	file road_shape <- file("../includes/roads.shp");
 	geometry shape <- envelope(building_shape, road_shape);
 	graph road_network;
 	float shelter_distance <- 60#m;
@@ -30,8 +28,13 @@ global {
 	float informed_rate <- 0.01;
 	float observing_rate <- 0.5;
 	float observing_distance <- 10#m;
+	int num_people <- 1000;
 	
-	
+//	Extension3
+	string strategies;
+	string RANDOM <- "Random";
+	string CLOSEST <- "Closest";
+	string FARTHEST <- "Farthest";	
 	
 	
 //	initialize
@@ -40,8 +43,25 @@ global {
 		create road from: road_shape;
 		road_network <- as_edge_graph(road_shape);
 		
-		create people number: 1000;
-	}		
+		create people number: num_people;
+		
+		
+		if strategies = RANDOM{
+			ask (num_people * informed_rate) among people{
+				is_informed <- true;
+			}
+		} else if strategies = CLOSEST {
+			ask (people closest_to (building[shelter_index].shape, num_people*informed_rate)){
+				is_informed <- true;
+			}
+		}else{
+			list<people> sort_people <- people sort_by(distance_to(each.location, building[shelter_index].shape));
+			ask (sort_people copy_between(num_people-(num_people*informed_rate), num_people+1)){
+				is_informed <- true;
+			}
+		}
+
+	}	
 }
 
 
@@ -64,18 +84,18 @@ species road{
 }
 
 species people skills: [moving]{
-//	variable
+
 	float speed <- 5#km/#h;
 	bool is_informed <- false;	//true if informed directly  
 	bool is_observing <- false;	//true if see s.o. evaculated and flip=true
 	bool is_reached <- false;
 	building shelter <- building[shelter_index];
 	point target;
-//  init
+	
+	list<people> selected_people;
+
 	init{
 		location <- any_location_in(one_of(building));
-//		location <- any_location_in(building[27]);
-		is_informed <- flip(informed_rate);
 	}
 	
 //	action
@@ -101,8 +121,8 @@ species people skills: [moving]{
 		}
 	}
 	
-//	reflex
 	reflex moving when: not is_reached{
+		write(strategies);
 		if is_informed{
 			// go to shelter directly
 			do to_shelter_directly;
@@ -110,24 +130,19 @@ species people skills: [moving]{
 		else if is_observing{
 			// if within shelter distances, go directly
 			if location distance_to shelter.shape <= shelter_distance{
-				write("observe and go directly");
+//				write("observe and go directly");
 				target <- nil;
 				do to_shelter_directly;
 			}
-//			// if not go to one building randomly
+			// if not go to one building randomly
 			else{
-				write("observe and random search");
+//				write("observe and random search");
 				do randomly_search_shelter;
 				
 			}
 		}
-//		if not is_informed and not is_observing{			
-		// this feature do not know how to implement, cuz can not get geometry bound.
-//			do wander; // TODO: wander within the buidling if not informed and not know about evacuation.
-//		}
-		
-		
 	}
+		
 	reflex being_observe when: is_informed or is_observing{
 		// This observe is related to the time step execution since and the speed of people travel.
 		// if people moving to slow, the same observation people have high protial to flip their luck for next time step.  
@@ -139,8 +154,6 @@ species people skills: [moving]{
 		}
 	}
 	
-	
-//	aspect
 	aspect default{
 		draw circle(4) color: is_informed? #purple : #green ;
 	}
@@ -150,12 +163,31 @@ species people skills: [moving]{
 
 experiment evaluate type: gui {
 	/** Insert here the definition of the input and output of the model */
+	parameter "Number of People" var: num_people <- 600 min:500 max:1000 step:50 category: "Initialize";
+	parameter "Informed Rate" var: informed_rate <- 0.1 min:0.1 max:1.0 step:0.05 category: "Initialize";
+	parameter "Strategiy Selection" var: strategies init:"Random" among:["Random", "Closest", "Farthest"] category: "Initialize";
+	parameter "Observing Rate" var: observing_rate <- 0.1 min:0.05 max:1.0 step: 0.05;
+	parameter "Observing Distance" var: observing_distance <- 60#m min:0#m max:100#m step: 10#m;
+	parameter "Shelter Distance" var: shelter_distance <- 60#m min:0#m max:200#m step: 10#m;
+	
 	output {
 		display simulation type: 2d{
 			species building;
 			species road;
 			species people;
 		}
-
+		display chart type: 2d{
+			chart "People Reached the Shelter" type: series{
+				data "#Informed" value: people count(each.is_informed = true and each.is_reached=true) color: #purple; 
+				data "#Not_Informed" value: people count(each.is_informed = false and each.is_reached=true) color: #green;
+				data "#Total" value: people count(each.is_reached=true) color: #blue;
+			}
+		}
+		display pie_chart type: 2d{
+			chart "Pie chart" type: pie{
+				data "#Informed" value: people count(each.is_informed = true and each.is_reached=true) color: #purple; 
+				data "#Not_Informed" value: people count(each.is_informed = false and each.is_reached=true) color: #green;
+			}
+		}
 	}
 }
