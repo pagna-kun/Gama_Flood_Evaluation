@@ -20,7 +20,7 @@ global {
 	file road_shape <- file("../includes/roads.shp");
 	geometry shape <- envelope(building_shape, road_shape);
 	graph road_network;
-	float shelter_distance <- 100#m;
+	float shelter_distance <- 300#m;
 	int shelter_index <- 246;
 	
 //	Global of people
@@ -38,6 +38,7 @@ global {
 		road_network <- as_edge_graph(road_shape);
 		
 		create people number: 1000;
+	
 	}		
 }
 
@@ -47,7 +48,10 @@ global {
  */
 species building{
 	aspect default{
-		draw shape color: self.index = shelter_index? #orange : #gray ;
+		draw shape color: self.index = shelter_index? #orange : #gray;
+		if (int(self) = shelter_index){
+			draw circle (shelter_distance) color: #transparent border: #blue width: 50;
+		}
 	}
 }
 
@@ -58,21 +62,22 @@ species road{
 }
 
 species people skills: [moving]{
-//	variable
-	float speed <- 20#km/#h;
+
+
+	float speed <- 10#km/#h;
 	bool is_informed <- false;	//true if informed directly  
 	bool is_observing <- false;	//true if see s.o. evaculated and flip=true
 	bool is_reached <- false;
 	building shelter <- building[shelter_index];
 	point target;
-//  init
+
+
 	init{
 		location <- any_location_in(one_of(building));
-//		location <- any_location_in(building[246]);
 		is_informed <- flip(informed_rate);
 	}
+
 	
-//	action
 	action to_shelter_directly{
 		if target = nil{
 			target <- any_location_in(shelter);
@@ -82,6 +87,7 @@ species people skills: [moving]{
 			is_reached <- true;
 		}
 	}
+
 	action randomly_search_shelter{
 		// this logic work depend only 2 factors.
 		// - one is the shelter distance is big, and agent roam around until go in range.
@@ -94,8 +100,8 @@ species people skills: [moving]{
 			target <- nil;
 		}
 	}
-	
-//	reflex
+
+
 	reflex moving when: not is_reached{
 		if is_informed{
 			// go to shelter directly
@@ -115,41 +121,45 @@ species people skills: [moving]{
 				
 			}
 		}
-//		if not is_informed and not is_observing{			
-		// this feature do not know how to implement, cuz can not get geometry bound.
-//			do wander; // TODO: wander within the buidling if not informed and not know about evacuation.
-//		}
-		
-		
 	}
+
 	reflex being_observe when: is_informed or is_observing{
 		// This observe is related to the time step execution since and the speed of people travel.
 		// if people moving to slow, the same observation people have high protial to flip their luck for next time step.  
 		list<people> neighbor <- people at_distance(observing_distance);
 		ask neighbor{
-			if not is_observing or not is_informed{
+			if not is_observing and not is_informed{
 				is_observing <- flip(observing_rate);
 			}
 		}
 	}
 	
 	
-//	aspect
 	aspect default{
-		draw circle(10) color: is_informed? #purple : #green ;
+		draw circle(7) color: is_informed? #purple : #green ;
 	}
-	
-	
 }
 
 experiment evaluate type: gui {
 	/** Insert here the definition of the input and output of the model */
+	parameter "Informed Rate" var: informed_rate <- 0.1 min:0.1 max:1.0 step:0.05;
+	parameter "Observing Rate" var: observing_rate <- 0.1 min:0.1 max:1.0 step: 0.05;
+	parameter "Observing Distance" var: observing_distance <- 100#m min:0#m max:150#m step: 10#m;
+	parameter "Shelter Distance" var: shelter_distance <- 300#m min:0#m max:600#m step: 10#m;
+	
 	output {
-		display simulation type: 3d{
-			species building;
+		display simulation type: 2d{
 			species road;
+			species building;
 			species people;
 		}
-
+		display chart type: 2d{
+			chart "People Reached the Shelter" type: series{
+				data "#Informed" value: people count(each.is_informed = true and each.is_reached=true) color: #purple; 
+				data "#Not_Informed" value: people count(each.is_informed = false and each.is_reached=true) color: #green;
+				data "#Total" value: people count(each.is_reached=true) color: #blue;
+			}
+		}
+	
 	}
 }
