@@ -27,7 +27,15 @@ global {
 	float informed_rate <- 0.1;
 	float observing_rate <- 0.1;
 	float observing_distance <- 100#m;
+	int num_people <- 1000;
 	
+	
+//	Extension3
+	string strategies;
+	string RANDOM <- "Random";
+	string CLOSEST <- "Closest";
+	string FARTHEST <- "Farthest";
+	 
 	
 	
 	
@@ -37,8 +45,24 @@ global {
 		create road from: road_shape;
 		road_network <- as_edge_graph(road_shape);
 		
-		create people number: 1000;
-	
+		create people number: num_people;
+		
+		
+		if strategies = RANDOM{
+			ask (num_people * informed_rate) among people{
+				is_informed <- true;
+			}
+		} else if strategies = CLOSEST {
+			ask (people closest_to (building[shelter_index].shape, num_people*informed_rate)){
+				is_informed <- true;
+			}
+		}else{
+			list<people> sort_people <- people sort_by(distance_to(each.location, building[shelter_index].shape));
+			ask (sort_people copy_between(num_people-(num_people*informed_rate), num_people+1)){
+				is_informed <- true;
+			}
+		}
+
 	}		
 }
 
@@ -71,12 +95,12 @@ species people skills: [moving]{
 	building shelter <- building[shelter_index];
 	point target;
 
+	list<people> selected_people;
+	
 
 	init{
 		location <- any_location_in(one_of(building));
-		is_informed <- flip(informed_rate);
 	}
-
 	
 	action to_shelter_directly{
 		if target = nil{
@@ -103,6 +127,7 @@ species people skills: [moving]{
 
 
 	reflex moving when: not is_reached{
+		write(strategies);
 		if is_informed{
 			// go to shelter directly
 			do to_shelter_directly;
@@ -110,13 +135,13 @@ species people skills: [moving]{
 		else if is_observing{
 			// if within shelter distances, go directly
 			if location distance_to shelter.shape <= shelter_distance{
-				write("observe and go directly");
+//				write("observe and go directly");
 				target <- nil;
 				do to_shelter_directly;
 			}
 			// if not go to one building randomly
 			else{
-				write("observe and random search");
+//				write("observe and random search");
 				do randomly_search_shelter;
 				
 			}
@@ -142,10 +167,12 @@ species people skills: [moving]{
 
 experiment evaluate type: gui {
 	/** Insert here the definition of the input and output of the model */
-	parameter "Informed Rate" var: informed_rate <- 0.1 min:0.1 max:1.0 step:0.05;
+	parameter "Number of People" var: num_people <- 800 min:500 max:2000 step:50 category: "Initialize";
+	parameter "Informed Rate" var: informed_rate <- 0.1 min:0.1 max:1.0 step:0.05 category: "Initialize";
+	parameter "Strategiy Selection" var: strategies init:"Random" among:["Random", "Closest", "Farthest"] category: "Initialize";
 	parameter "Observing Rate" var: observing_rate <- 0.1 min:0.1 max:1.0 step: 0.05;
 	parameter "Observing Distance" var: observing_distance <- 100#m min:0#m max:150#m step: 10#m;
-	parameter "Shelter Distance" var: shelter_distance <- 300#m min:0#m max:600#m step: 10#m;
+	parameter "Shelter Distance" var: shelter_distance <- 250#m min:0#m max:600#m step: 10#m;
 	
 	output {
 		display simulation type: 2d{
@@ -158,6 +185,12 @@ experiment evaluate type: gui {
 				data "#Informed" value: people count(each.is_informed = true and each.is_reached=true) color: #purple; 
 				data "#Not_Informed" value: people count(each.is_informed = false and each.is_reached=true) color: #green;
 				data "#Total" value: people count(each.is_reached=true) color: #blue;
+			}
+		}
+		display pie_chart type: 2d{
+			chart "Pie chart" type: pie{
+				data "#Informed" value: people count(each.is_informed = true and each.is_reached=true) color: #purple; 
+				data "#Not_Informed" value: people count(each.is_informed = false and each.is_reached=true) color: #green;
 			}
 		}
 	
